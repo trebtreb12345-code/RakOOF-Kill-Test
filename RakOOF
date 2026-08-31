@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -41,8 +42,8 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = PlayerGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 340, 0, 580)
-MainFrame.Position = UDim2.new(0.5, -170, 0.35, -290)
+MainFrame.Size = UDim2.new(0, 340, 0, 620)
+MainFrame.Position = UDim2.new(0.5, -170, 0.35, -310)
 MainFrame.BackgroundColor3 = Color3.fromRGB(235, 235, 240)
 MainFrame.BackgroundTransparency = 0.5
 MainFrame.BorderSizePixel = 0
@@ -182,13 +183,14 @@ end
 
 local SafezoneBtn = CreateButton("🛡️ Teleport to Safezone (Ready Guy)", 1, false)
 local SpawnBtn = CreateButton("📍 Teleport to Nearest Spawn", 2, false)
-local TPBtn = CreateButton("🎯 Teleport to Target", 3, false)
-local BringBtn = CreateButton("🧲 Bring RakOOF: OFF", 4, false)
-local HitboxBtn = CreateButton("📦 Expand RakOOF Hitbox: OFF", 5, false)
-local AutoKillBtn = CreateButton("⚔️ Auto Attack: OFF", 6, false)
-local AutoLootBtn = CreateButton("📦 Auto Pickup: ON", 7, true)
-local SpeedBtn = CreateButton("⚡ Speed Boost: OFF", 8, false)
-local FogBtn = CreateButton("💡 No Fog / Fullbright: OFF", 9, false)
+local RockBtn = CreateButton("🗿 Teleport to Rock Mesh", 3, false)
+local TPBtn = CreateButton("🎯 Teleport to Target", 4, false)
+local BringBtn = CreateButton("🧲 Bring RakOOF: OFF", 5, false)
+local HitboxBtn = CreateButton("📦 Expand RakOOF Hitbox: OFF", 6, false)
+local AutoKillBtn = CreateButton("⚔️ Auto Attack: OFF", 7, false)
+local AutoLootBtn = CreateButton("📦 Auto Pickup: ON", 8, true)
+local SpeedBtn = CreateButton("⚡ Speed Boost: OFF", 9, false)
+local FogBtn = CreateButton("💡 No Fog / Fullbright: OFF", 10, false)
 
 --------------------------------------------------------------------------------
 -- 3. KEYBIND TOGGLE
@@ -201,20 +203,46 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 --------------------------------------------------------------------------------
--- 4. TELEPORT TO SAFEZONE (READY GUY / NPC)
+-- 4. TELEPORT TO ROCK MESH
+--------------------------------------------------------------------------------
+RockBtn.MouseButton1Click:Connect(function()
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local hrp = character.HumanoidRootPart
+    
+    -- Check ReplicatedStorage first, then fall back to Workspace
+    local rockObj = ReplicatedStorage:FindFirstChild("rock", true) or Workspace:FindFirstChild("rock", true)
+    
+    if rockObj then
+        if rockObj:IsA("BasePart") then
+            hrp.CFrame = rockObj.CFrame
+        elseif rockObj:IsA("Model") then
+            local targetPart = rockObj.PrimaryPart or rockObj:FindFirstChildWhichIsA("BasePart")
+            if targetPart then
+                hrp.CFrame = targetPart.CFrame
+            else
+                warn("Rock model found, but contains no valid parts to teleport to.")
+            end
+        end
+    else
+        warn("Mesh/Part named 'rock' was not found in ReplicatedStorage or Workspace.")
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 5. TELEPORT TO SAFEZONE (READY GUY / NPC)
 --------------------------------------------------------------------------------
 local function findSafezoneNPC()
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and not Players:GetPlayerFromCharacter(obj) then
             local nameLower = string.lower(obj.Name)
             
-            -- Search by name keywords or tools held (like Pan/Block guy)
             if string.find(nameLower, "ready") or string.find(nameLower, "safe") or string.find(nameLower, "spawn") or string.find(nameLower, "npc") then
                 local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso") or obj.PrimaryPart
                 if root then return root end
             end
             
-            -- Look for character holding a pan/tool or with "READY" floating text
             if obj:FindFirstChildOfClass("Tool") or obj:FindFirstChild("Pan") or obj:FindFirstChild("FryingPan") then
                 local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso") or obj.PrimaryPart
                 if root then return root end
@@ -222,7 +250,6 @@ local function findSafezoneNPC()
         end
     end
     
-    -- Fallback: Look for "READY" text gui in workspace
     for _, gui in ipairs(Workspace:GetDescendants()) do
         if gui:IsA("TextLabel") and string.find(string.lower(gui.Text), "ready") then
             local parentPart = gui:FindFirstAncestorOfClass("BasePart") or gui:FindFirstAncestorOfClass("Model")
@@ -247,7 +274,6 @@ SafezoneBtn.MouseButton1Click:Connect(function()
             character.HumanoidRootPart.CFrame = targetNPC.PrimaryPart.CFrame * CFrame.new(0, 0, -3)
         end
     else
-        -- If NPC object isn't found by script, fall back to nearest spawn location
         for _, obj in ipairs(Workspace:GetDescendants()) do
             if obj:IsA("SpawnLocation") then
                 character.HumanoidRootPart.CFrame = obj.CFrame + Vector3.new(0, 3.5, 0)
@@ -258,7 +284,7 @@ SafezoneBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 5. TELEPORT TO NEAREST SPAWN LOGIC
+-- 6. TELEPORT TO NEAREST SPAWN LOGIC
 --------------------------------------------------------------------------------
 local function teleportToNearestSpawn()
     local character = LocalPlayer.Character
@@ -286,7 +312,7 @@ end
 SpawnBtn.MouseButton1Click:Connect(teleportToNearestSpawn)
 
 --------------------------------------------------------------------------------
--- 6. TARGET DETECTOR & HIGHLIGHTING
+-- 7. TARGET DETECTOR & HIGHLIGHTING
 --------------------------------------------------------------------------------
 local function findBossRoot()
     for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -361,7 +387,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 7. HITBOX EXPANDER TOGGLE
+-- 8. HITBOX EXPANDER TOGGLE
 --------------------------------------------------------------------------------
 HitboxBtn.MouseButton1Click:Connect(function()
     EXPAND_HITBOX_ENABLED = not EXPAND_HITBOX_ENABLED
@@ -381,7 +407,7 @@ HitboxBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 8. BRING RAKOOF LOGIC
+-- 9. BRING RAKOOF LOGIC
 --------------------------------------------------------------------------------
 BringBtn.MouseButton1Click:Connect(function()
     BRING_BOSS_ENABLED = not BRING_BOSS_ENABLED
@@ -406,7 +432,7 @@ BringBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 9. ITEM PICKUP & SPEED CONTROLS
+-- 10. ITEM PICKUP & SPEED CONTROLS
 --------------------------------------------------------------------------------
 local function teleportToDroppedItems()
     local character = LocalPlayer.Character
@@ -449,7 +475,7 @@ SpeedBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 10. WEAPON SELECTION & AUTO ATTACK
+-- 11. WEAPON SELECTION & AUTO ATTACK
 --------------------------------------------------------------------------------
 local function getBestWeapon()
     local character = LocalPlayer.Character
@@ -522,7 +548,7 @@ AutoKillBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 11. NO FOG / FULLBRIGHT TOGGLE
+-- 12. NO FOG / FULLBRIGHT TOGGLE
 --------------------------------------------------------------------------------
 local defaultFogEnd = Lighting.FogEnd
 local defaultBrightness = Lighting.Brightness
