@@ -17,7 +17,7 @@ local TOGGLE_KEY = Enum.KeyCode.RightControl
 local connectionLoop = nil
 
 --------------------------------------------------------------------------------
--- 1. DRAGGABLE GUI CREATION (WHITE & GRAY THEME)
+-- 1. DRAGGABLE & TRANSPARENT GUI CREATION
 --------------------------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "PenguinHub"
@@ -25,74 +25,51 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = PlayerGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 270, 0, 240)
-MainFrame.Position = UDim2.new(0.5, -135, 0.4, -120)
-MainFrame.BackgroundColor3 = Color3.fromRGB(245, 245, 247) -- Light Gray Background
+MainFrame.Size = UDim2.new(0, 320, 0, 260) -- INCREASED SIZE
+MainFrame.Position = UDim2.new(0.5, -160, 0.4, -130)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+MainFrame.BackgroundTransparency = 0.3 -- MADE TRANSPARENT
 MainFrame.BorderSizePixel = 0
+MainFrame.Active = true -- REQUIRED FOR SMOOTH DRAGGING
 MainFrame.Parent = ScreenGui
 
 local FrameCorner = Instance.new("UICorner")
 FrameCorner.CornerRadius = UDim.new(0, 8)
 FrameCorner.Parent = MainFrame
 
--- Outer Border
-local UIStroke = Instance.new("UIStroke")
-UIStroke.Color = Color3.fromRGB(210, 210, 215)
-UIStroke.Thickness = 1.5
-UIStroke.Parent = MainFrame
-
--- Title Bar Container
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 40)
-TitleBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- Pure White Header
-TitleBar.BorderSizePixel = 0
+local TitleBar = Instance.new("TextLabel")
+TitleBar.Size = UDim2.new(1, 0, 0, 45) -- INCREASED SIZE
+TitleBar.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+TitleBar.BackgroundTransparency = 0.3 -- MADE TRANSPARENT
+TitleBar.Text = "  🐧 Penguin Hub [RightCtrl]"
+TitleBar.TextColor3 = Color3.fromRGB(0, 200, 255)
+TitleBar.TextXAlignment = Enum.TextXAlignment.Left
+TitleBar.Font = Enum.Font.SourceSansBold
+TitleBar.TextSize = 20 -- INCREASED TEXT SIZE
+TitleBar.Active = true
 TitleBar.Parent = MainFrame
 
 local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 8)
 TitleCorner.Parent = TitleBar
 
---------------------------------------------------------------------------------
--- 2. ANIMATED PENGUIN SPRITE
---------------------------------------------------------------------------------
-local PenguinLabel = Instance.new("TextLabel")
-PenguinLabel.Size = UDim2.new(0, 30, 0, 30)
-PenguinLabel.Position = UDim2.new(0, 8, 0.5, -15)
-PenguinLabel.BackgroundTransparency = 1
-PenguinLabel.Text = "🐧"
-PenguinLabel.TextSize = 22
-PenguinLabel.Parent = TitleBar
+-- SMOOTH DRAGGING LOGIC FIX
+local dragging
+local dragInput
+local dragStart
+local startPos
 
--- Text Label
-local TitleText = Instance.new("TextLabel")
-TitleText.Size = UDim2.new(1, -45, 1, 0)
-TitleText.Position = UDim2.new(0, 40, 0, 0)
-TitleText.BackgroundTransparency = 1
-TitleText.Text = "Penguin Hub [RightCtrl]"
-TitleText.TextColor3 = Color3.fromRGB(40, 40, 45)
-TitleText.TextXAlignment = Enum.TextXAlignment.Left
-TitleText.Font = Enum.Font.SourceSansBold
-TitleText.TextSize = 16
-TitleText.Parent = TitleBar
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
 
--- Dancing Animation Loop for the Penguin Icon
-task.spawn(function()
-    local frames = {"🐧", "🐧", "🐧", "🐧"}
-    local step = 0
-    while task.wait(0.2) do
-        step = step + 1
-        local angle = math.sin(step * 0.8) * 15
-        PenguinLabel.Rotation = angle
-    end
-end)
-
--- Make GUI Draggable
-local dragging, dragInput, dragStart, startPos
 TitleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
         startPos = MainFrame.Position
+        
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
@@ -102,51 +79,46 @@ TitleBar.InputBegan:Connect(function(input)
 end)
 
 TitleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
         dragInput = input
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        updateInput(input)
     end
 end)
 
 -- Buttons Layout
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.Padding = UDim.new(0, 10)
 UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Parent = MainFrame
 
 local Padding = Instance.new("UIPadding")
-Padding.PaddingTop = UDim.new(0, 50)
+Padding.PaddingTop = UDim.new(0, 55)
 Padding.Parent = MainFrame
 
 --------------------------------------------------------------------------------
--- 3. BUTTON CREATION UTILITY (LIGHT THEME)
+-- 2. BUTTON CREATION UTILITY
 --------------------------------------------------------------------------------
 local function CreateButton(text, order)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.9, 0, 0, 32)
-    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Size = UDim2.new(0.9, 0, 0, 45) -- INCREASED BUTTON SIZE
+    btn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    btn.BackgroundTransparency = 0.15 -- SLIGHT TRANSPARENCY
     btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(50, 50, 55)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Font = Enum.Font.SourceSansBold
-    btn.TextSize = 14
+    btn.TextSize = 18 -- INCREASED TEXT SIZE
     btn.LayoutOrder = order
     btn.Parent = MainFrame
     
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(220, 220, 225)
-    stroke.Thickness = 1
-    stroke.Parent = btn
     
     return btn
 end
@@ -154,13 +126,10 @@ end
 local TPBtn = CreateButton("Teleport to " .. TARGET_NAME, 1)
 local AutoKillBtn = CreateButton("Auto Kill: OFF", 2)
 local AutoLootBtn = CreateButton("Auto Pickup: ON", 3)
-
--- Set active color state for auto pickup
-AutoLootBtn.BackgroundColor3 = Color3.fromRGB(225, 245, 230)
-AutoLootBtn.TextColor3 = Color3.fromRGB(20, 120, 50)
+AutoLootBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 60)
 
 --------------------------------------------------------------------------------
--- 4. KEYBIND TOGGLE
+-- 3. KEYBIND TOGGLE
 --------------------------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
@@ -170,7 +139,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 --------------------------------------------------------------------------------
--- 5. TARGET & ITEM HIGHLIGHTING
+-- 4. TARGET & ITEM HIGHLIGHTING
 --------------------------------------------------------------------------------
 local function findBoss()
     for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -221,7 +190,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 6. ITEM PICKUP LOGIC
+-- 5. ITEM PICKUP LOGIC
 --------------------------------------------------------------------------------
 local function teleportToDroppedItems()
     local character = LocalPlayer.Character
@@ -250,17 +219,15 @@ AutoLootBtn.MouseButton1Click:Connect(function()
     AUTO_PICKUP_ENABLED = not AUTO_PICKUP_ENABLED
     if AUTO_PICKUP_ENABLED then
         AutoLootBtn.Text = "Auto Pickup: ON"
-        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(225, 245, 230)
-        AutoLootBtn.TextColor3 = Color3.fromRGB(20, 120, 50)
+        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 60)
     else
         AutoLootBtn.Text = "Auto Pickup: OFF"
-        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        AutoLootBtn.TextColor3 = Color3.fromRGB(50, 50, 55)
+        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
     end
 end)
 
 --------------------------------------------------------------------------------
--- 7. TELEPORT & ATTACK LOGIC
+-- 6. TELEPORT & ATTACK LOGIC
 --------------------------------------------------------------------------------
 local function getBossRoot(boss)
     return boss:FindFirstChild("HumanoidRootPart") or boss:FindFirstChild("Torso") or boss.PrimaryPart
@@ -307,8 +274,7 @@ AutoKillBtn.MouseButton1Click:Connect(function()
     
     if AUTO_KILL_ENABLED then
         AutoKillBtn.Text = "Auto Kill: ON"
-        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(225, 245, 230)
-        AutoKillBtn.TextColor3 = Color3.fromRGB(20, 120, 50)
+        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 60)
         
         connectionLoop = RunService.Heartbeat:Connect(function()
             local boss = findBoss()
@@ -328,8 +294,7 @@ AutoKillBtn.MouseButton1Click:Connect(function()
         end)
     else
         AutoKillBtn.Text = "Auto Kill: OFF"
-        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        AutoKillBtn.TextColor3 = Color3.fromRGB(50, 50, 55)
+        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
         if connectionLoop then
             connectionLoop:Disconnect()
             connectionLoop = nil
