@@ -1,17 +1,31 @@
--- Penguin Hub | UI Display & Target Finding Setup
+-- Penguin Hub | All-in-One Boss Tracker, Auto Attack & Environment GUI
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- Configuration
 local TARGET_NAME = "rakoof"
-local TOGGLE_KEY = Enum.KeyCode.RightControl
+local AUTO_KILL_ENABLED = false
+local AUTO_PICKUP_ENABLED = true
+local AUTO_KILL_DISTANCE = 5 
+local TOGGLE_KEY = Enum.KeyCode.RightControl 
+local connectionLoop = nil
+
+-- Weapon Priority List (Highest to Lowest)
+local WEAPON_PRIORITY = {
+    "TormentumAxe",
+    "Murasama",
+    "Ruinstrikers",
+    "StunStick"
+}
 
 --------------------------------------------------------------------------------
--- 1. DRAGGABLE & TRANSPARENT WHITE/GRAY GUI
+-- 1. TRANSPARENT WHITE/GRAY GUI SETUP
 --------------------------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "PenguinHubCustom"
@@ -19,10 +33,10 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = PlayerGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 320, 0, 280)
-MainFrame.Position = UDim2.new(0.5, -160, 0.4, -140)
-MainFrame.BackgroundColor3 = Color3.fromRGB(220, 220, 225) -- White / Light Gray
-MainFrame.BackgroundTransparency = 0.5 -- 0.5 TRANSPARENCY
+MainFrame.Size = UDim2.new(0, 320, 0, 340)
+MainFrame.Position = UDim2.new(0.5, -160, 0.4, -170)
+MainFrame.BackgroundColor3 = Color3.fromRGB(220, 220, 225)
+MainFrame.BackgroundTransparency = 0.5
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Parent = ScreenGui
@@ -33,7 +47,7 @@ FrameCorner.Parent = MainFrame
 
 local TitleBar = Instance.new("TextLabel")
 TitleBar.Size = UDim2.new(1, 0, 0, 45)
-TitleBar.BackgroundColor3 = Color3.fromRGB(120, 120, 130) -- Darker Gray
+TitleBar.BackgroundColor3 = Color3.fromRGB(120, 120, 130)
 TitleBar.BackgroundTransparency = 0.5
 TitleBar.Text = "  Penguin Hub [RightCtrl]"
 TitleBar.TextColor3 = Color3.fromRGB(30, 30, 30)
@@ -58,7 +72,6 @@ PenguinLabel.Font = Enum.Font.Code
 PenguinLabel.TextSize = 16
 PenguinLabel.Parent = TitleBar
 
--- Dancing Penguin Frame Loop
 local frames = {"( o_o)>", "<(o_o )", "(>o_o)>", "<(o_o<)"}
 task.spawn(function()
     local index = 1
@@ -98,8 +111,47 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
+-- Layout Setup
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Parent = MainFrame
+
+local Padding = Instance.new("UIPadding")
+Padding.PaddingTop = UDim.new(0, 55)
+Padding.Parent = MainFrame
+
 --------------------------------------------------------------------------------
--- 2. KEYBIND TOGGLE
+-- 2. BUTTON UTILITY
+--------------------------------------------------------------------------------
+local function CreateButton(text, order)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9, 0, 0, 40)
+    btn.BackgroundColor3 = Color3.fromRGB(160, 160, 170)
+    btn.BackgroundTransparency = 0.3
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(20, 20, 20)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 16
+    btn.LayoutOrder = order
+    btn.Parent = MainFrame
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = btn
+    
+    return btn
+end
+
+local TPBtn = CreateButton("Teleport to Target", 1)
+local AutoKillBtn = CreateButton("Auto Attack: OFF", 2)
+local AutoLootBtn = CreateButton("Auto Pickup: ON", 3)
+local FogBtn = CreateButton("No Fog / Fullbright: OFF", 4)
+AutoLootBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 120)
+
+--------------------------------------------------------------------------------
+-- 3. KEYBIND TOGGLE
 --------------------------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
@@ -109,14 +161,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 --------------------------------------------------------------------------------
--- 3. TARGET DETECTOR (SEARCHES FOR TORSO / HUMANOIDROOTPART)
+-- 4. TARGET DETECTOR & HIGHLIGHTING
 --------------------------------------------------------------------------------
 local function findBossRoot()
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") then
             local nameLower = string.lower(obj.Name)
-            if string.find(nameLower, TARGET_NAME) then
-                -- Look for Torso, UpperTorso, or HumanoidRootPart
+            if string.find(nameLower, TARGET_NAME) or string.find(nameLower, "ashbound") then
                 local targetPart = obj:FindFirstChild("Torso") 
                     or obj:FindFirstChild("UpperTorso") 
                     or obj:FindFirstChild("HumanoidRootPart") 
@@ -130,3 +181,182 @@ local function findBossRoot()
     end
     return nil, nil
 end
+
+local function applyBossHighlight(boss)
+    if not boss:FindFirstChild("PenguinHighlight") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "PenguinHighlight"
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.Parent = boss
+    end
+end
+
+local function checkAndHighlightItems()
+    for _, item in ipairs(Workspace:GetChildren()) do
+        if (item:IsA("Tool") or item:IsA("Model") or item:IsA("BasePart")) and not Players:GetPlayerFromCharacter(item) then
+            if not item:FindFirstChild("PenguinItemHighlight") and (item:FindFirstChild("Handle") or item:IsA("BasePart")) then
+                local yellowHighlight = Instance.new("Highlight")
+                yellowHighlight.Name = "PenguinItemHighlight"
+                yellowHighlight.FillColor = Color3.fromRGB(255, 255, 0)
+                yellowHighlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+                yellowHighlight.FillTransparency = 0.3
+                yellowHighlight.OutlineTransparency = 0
+                yellowHighlight.Parent = item
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    local boss, _ = findBossRoot()
+    if boss then
+        applyBossHighlight(boss)
+    end
+    
+    if AUTO_PICKUP_ENABLED then
+        checkAndHighlightItems()
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 5. ITEM PICKUP LOGIC
+--------------------------------------------------------------------------------
+local function teleportToDroppedItems()
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:FindFirstChild("PenguinItemHighlight") then
+            local targetCFrame = nil
+            if obj:IsA("BasePart") then
+                targetCFrame = obj.CFrame
+            elseif obj:FindFirstChild("Handle") then
+                targetCFrame = obj.Handle.CFrame
+            elseif obj.PrimaryPart then
+                targetCFrame = obj.PrimaryPart.CFrame
+            end
+
+            if targetCFrame then
+                character.HumanoidRootPart.CFrame = targetCFrame
+                task.wait(0.1)
+            end
+        end
+    end
+end
+
+AutoLootBtn.MouseButton1Click:Connect(function()
+    AUTO_PICKUP_ENABLED = not AUTO_PICKUP_ENABLED
+    if AUTO_PICKUP_ENABLED then
+        AutoLootBtn.Text = "Auto Pickup: ON"
+        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 120)
+    else
+        AutoLootBtn.Text = "Auto Pickup: OFF"
+        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(160, 160, 170)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 6. WEAPON SELECTION & ATTACK SYSTEM
+--------------------------------------------------------------------------------
+local function getBestWeapon()
+    local character = LocalPlayer.Character
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not character or not backpack then return nil end
+
+    -- Check configured priority weapons first
+    for _, weaponName in ipairs(WEAPON_PRIORITY) do
+        local equipped = character:FindFirstChild(weaponName)
+        if equipped and equipped:IsA("Tool") then return equipped end
+        
+        local inBackpack = backpack:FindFirstChild(weaponName)
+        if inBackpack and inBackpack:IsA("Tool") then return inBackpack end
+    end
+    
+    -- Fallback to any tool available in Backpack
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") then return tool end
+    end
+
+    return nil
+end
+
+local function equipAndAttack()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local bestTool = getBestWeapon()
+    
+    if humanoid and bestTool then
+        if bestTool.Parent ~= character then
+            humanoid:EquipTool(bestTool)
+        end
+        bestTool:Activate()
+    end
+end
+
+TPBtn.MouseButton1Click:Connect(function()
+    local boss, bossRoot = findBossRoot()
+    local character = LocalPlayer.Character
+    if bossRoot and character and character:FindFirstChild("HumanoidRootPart") then
+        character.HumanoidRootPart.CFrame = bossRoot.CFrame * CFrame.new(0, 0, AUTO_KILL_DISTANCE)
+    end
+end)
+
+AutoKillBtn.MouseButton1Click:Connect(function()
+    AUTO_KILL_ENABLED = not AUTO_KILL_ENABLED
+    
+    if AUTO_KILL_ENABLED then
+        AutoKillBtn.Text = "Auto Attack: ON"
+        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 120)
+        
+        connectionLoop = RunService.Heartbeat:Connect(function()
+            local boss, bossRoot = findBossRoot()
+            local character = LocalPlayer.Character
+            
+            if bossRoot and character and character:FindFirstChild("HumanoidRootPart") then
+                character.HumanoidRootPart.CFrame = bossRoot.CFrame * CFrame.new(0, 0, AUTO_KILL_DISTANCE)
+                equipAndAttack()
+            else
+                if AUTO_PICKUP_ENABLED then
+                    teleportToDroppedItems()
+                end
+            end
+        end)
+    else
+        AutoKillBtn.Text = "Auto Attack: OFF"
+        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(160, 160, 170)
+        if connectionLoop then
+            connectionLoop:Disconnect()
+            connectionLoop = nil
+        end
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 7. NO FOG / FULLBRIGHT TOGGLE
+--------------------------------------------------------------------------------
+local defaultFogEnd = Lighting.FogEnd
+local defaultBrightness = Lighting.Brightness
+local defaultGlobalShadows = Lighting.GlobalShadows
+local noFogActive = false
+
+FogBtn.MouseButton1Click:Connect(function()
+    noFogActive = not noFogActive
+    if noFogActive then
+        FogBtn.Text = "No Fog / Fullbright: ON"
+        FogBtn.BackgroundColor3 = Color3.fromRGB(100, 200, 120)
+        Lighting.FogEnd = 9e9
+        Lighting.Brightness = 2
+        Lighting.GlobalShadows = false
+    else
+        FogBtn.Text = "No Fog / Fullbright: OFF"
+        FogBtn.BackgroundColor3 = Color3.fromRGB(160, 160, 170)
+        Lighting.FogEnd = defaultFogEnd
+        Lighting.Brightness = defaultBrightness
+        Lighting.GlobalShadows = defaultGlobalShadows
+    end
+end)
