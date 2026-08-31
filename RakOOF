@@ -1,0 +1,293 @@
+-- Penguin Hub | Boss Tracker, Auto-Kill System & Auto Item Pickup
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Configuration
+local TARGET_NAME = "RakOOF"
+local AUTO_KILL_ENABLED = false
+local AUTO_PICKUP_ENABLED = true
+local AUTO_KILL_DISTANCE = 5 
+local TOGGLE_KEY = Enum.KeyCode.RightControl 
+local connectionLoop = nil
+
+--------------------------------------------------------------------------------
+-- 1. DRAGGABLE GUI CREATION
+--------------------------------------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "PenguinHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 260, 0, 220)
+MainFrame.Position = UDim2.new(0.5, -130, 0.4, -110)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+
+local FrameCorner = Instance.new("UICorner")
+FrameCorner.CornerRadius = UDim.new(0, 8)
+FrameCorner.Parent = MainFrame
+
+local TitleBar = Instance.new("TextLabel")
+TitleBar.Size = UDim2.new(1, 0, 0, 35)
+TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+TitleBar.Text = "  🐧 Penguin Hub [RightCtrl]"
+TitleBar.TextColor3 = Color3.fromRGB(0, 200, 255)
+TitleBar.TextXAlignment = Enum.TextXAlignment.Left
+TitleBar.Font = Enum.Font.SourceSansBold
+TitleBar.TextSize = 16
+TitleBar.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = TitleBar
+
+-- Make GUI Draggable
+local dragging, dragInput, dragStart, startPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+TitleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Buttons Layout
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Parent = MainFrame
+
+local Padding = Instance.new("UIPadding")
+Padding.PaddingTop = UDim.new(0, 45)
+Padding.Parent = MainFrame
+
+--------------------------------------------------------------------------------
+-- 2. BUTTON CREATION UTILITY
+--------------------------------------------------------------------------------
+local function CreateButton(text, order)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9, 0, 0, 32)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 14
+    btn.LayoutOrder = order
+    btn.Parent = MainFrame
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    return btn
+end
+
+local TPBtn = CreateButton("Teleport to " .. TARGET_NAME, 1)
+local AutoKillBtn = CreateButton("Auto Kill: OFF", 2)
+local AutoLootBtn = CreateButton("Auto Pickup: ON", 3)
+AutoLootBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+
+--------------------------------------------------------------------------------
+-- 3. KEYBIND TOGGLE
+--------------------------------------------------------------------------------
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == TOGGLE_KEY then
+        ScreenGui.Enabled = not ScreenGui.Enabled
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 4. RAKOOF & DROPPED ITEM HIGHLIGHTING
+--------------------------------------------------------------------------------
+local function findBoss()
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj.Name == TARGET_NAME then
+            return obj
+        end
+    end
+    return nil
+end
+
+local function applyBossHighlight(boss)
+    if not boss:FindFirstChild("PenguinHighlight") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "PenguinHighlight"
+        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.Parent = boss
+    end
+end
+
+-- Detect dropped items (Tool or Part dropped in Workspace)
+local function checkAndHighlightItems()
+    for _, item in ipairs(Workspace:GetChildren()) do
+        -- Checks for dropped items or tool drops in Workspace
+        if (item:IsA("Tool") or item:IsA("Model") or item:IsA("BasePart")) and not Players:GetPlayerFromCharacter(item) and item.Name ~= TARGET_NAME then
+            if not item:FindFirstChild("PenguinItemHighlight") and item:FindFirstChild("Handle") or item:IsA("BasePart") then
+                local yellowHighlight = Instance.new("Highlight")
+                yellowHighlight.Name = "PenguinItemHighlight"
+                yellowHighlight.FillColor = Color3.fromRGB(255, 255, 0)
+                yellowHighlight.OutlineColor = Color3.fromRGB(255, 255, 0)
+                yellowHighlight.FillTransparency = 0.3
+                yellowHighlight.OutlineTransparency = 0
+                yellowHighlight.Parent = item
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    local boss = findBoss()
+    if boss then
+        applyBossHighlight(boss)
+    end
+    
+    if AUTO_PICKUP_ENABLED then
+        checkAndHighlightItems()
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 5. AUTO ITEM PICKUP LOGIC
+--------------------------------------------------------------------------------
+local function teleportToDroppedItems()
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:FindFirstChild("PenguinItemHighlight") then
+            local targetCFrame = nil
+            if obj:IsA("BasePart") then
+                targetCFrame = obj.CFrame
+            elseif obj:FindFirstChild("Handle") then
+                targetCFrame = obj.Handle.CFrame
+            elseif obj.PrimaryPart then
+                targetCFrame = obj.PrimaryPart.CFrame
+            end
+
+            if targetCFrame then
+                -- Teleport directly onto the yellow-outlined dropped item
+                character.HumanoidRootPart.CFrame = targetCFrame
+                task.wait(0.1)
+            end
+        end
+    end
+end
+
+AutoLootBtn.MouseButton1Click:Connect(function()
+    AUTO_PICKUP_ENABLED = not AUTO_PICKUP_ENABLED
+    if AUTO_PICKUP_ENABLED then
+        AutoLootBtn.Text = "Auto Pickup: ON"
+        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+    else
+        AutoLootBtn.Text = "Auto Pickup: OFF"
+        AutoLootBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 6. TELEPORT & AUTO-KILL LOGIC
+--------------------------------------------------------------------------------
+local function getBossRoot(boss)
+    return boss:FindFirstChild("HumanoidRootPart") or boss:FindFirstChild("Torso") or boss.PrimaryPart
+end
+
+TPBtn.MouseButton1Click:Connect(function()
+    local boss = findBoss()
+    local character = LocalPlayer.Character
+    if boss and character and character:FindFirstChild("HumanoidRootPart") then
+        local bossRoot = getBossRoot(boss)
+        if bossRoot then
+            character.HumanoidRootPart.CFrame = bossRoot.CFrame * CFrame.new(0, 0, AUTO_KILL_DISTANCE)
+        end
+    end
+end)
+
+local currentSlot = 1
+local function attackSequence()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    
+    if backpack and humanoid then
+        local tools = backpack:GetChildren()
+        if #tools > 0 then
+            local toolToEquip = tools[(currentSlot - 1) % math.min(#tools, 3) + 1]
+            if toolToEquip and toolToEquip:IsA("Tool") then
+                humanoid:EquipTool(toolToEquip)
+            end
+        end
+    end
+    
+    currentSlot = (currentSlot % 3) + 1
+
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+end
+
+AutoKillBtn.MouseButton1Click:Connect(function()
+    AUTO_KILL_ENABLED = not AUTO_KILL_ENABLED
+    
+    if AUTO_KILL_ENABLED then
+        AutoKillBtn.Text = "Auto Kill: ON"
+        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+        
+        connectionLoop = RunService.Heartbeat:Connect(function()
+            local boss = findBoss()
+            local character = LocalPlayer.Character
+            
+            if boss and character and character:FindFirstChild("HumanoidRootPart") then
+                local bossRoot = getBossRoot(boss)
+                if bossRoot then
+                    character.HumanoidRootPart.CFrame = bossRoot.CFrame * CFrame.new(0, 0, AUTO_KILL_DISTANCE)
+                    attackSequence()
+                end
+            else
+                -- If boss dies or disappears, run auto pickup on yellow outline items
+                if AUTO_PICKUP_ENABLED then
+                    teleportToDroppedItems()
+                end
+            end
+        end)
+    else
+        AutoKillBtn.Text = "Auto Kill: OFF"
+        AutoKillBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+        if connectionLoop then
+            connectionLoop:Disconnect()
+            connectionLoop = nil
+        end
+    end
+end)
